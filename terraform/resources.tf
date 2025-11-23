@@ -49,23 +49,23 @@ resource "google_project_iam_member" "compute_viewer" {
   member  = "serviceAccount:${google_service_account.mig_scheduler.email}"
 }
 
-# Trigger Cloud Build to create default service accounts by creating a dummy build
-resource "null_resource" "trigger_cloudbuild_sa_creation" {
+# Check if Cloud Build default service account exists, if not create it
+resource "null_resource" "enable_cloudbuild_sa" {
   provisioner "local-exec" {
-    command = "gcloud builds list --limit=1 --project=${var.project_id} || true"
+    command = <<-EOT
+      gcloud beta services identity create --service=cloudbuild.googleapis.com --project=${var.project_id} || true
+      gcloud iam service-accounts describe ${var.project_id}-compute@developer.gserviceaccount.com --project=${var.project_id} || gcloud iam service-accounts create ${var.project_id}-compute --display-name="Compute Engine default service account" --project=${var.project_id}
+    EOT
   }
 
   depends_on = [google_project_service.required_apis]
 }
 
-# Wait for service accounts to be created (they're created async after API enablement)
+# Wait for service accounts to be fully propagated
 resource "time_sleep" "wait_for_service_accounts" {
-  create_duration = "60s"
+  create_duration = "30s"
 
-  depends_on = [
-    google_project_service.required_apis,
-    null_resource.trigger_cloudbuild_sa_creation
-  ]
+  depends_on = [null_resource.enable_cloudbuild_sa]
 }
 
 # Grant Cloud Build service account necessary permissions
