@@ -49,13 +49,32 @@ resource "google_project_iam_member" "compute_viewer" {
   member  = "serviceAccount:${google_service_account.mig_scheduler.email}"
 }
 
+# Trigger Cloud Build to create default service accounts by creating a dummy build
+resource "null_resource" "trigger_cloudbuild_sa_creation" {
+  provisioner "local-exec" {
+    command = "gcloud builds list --limit=1 --project=${var.project_id} || true"
+  }
+
+  depends_on = [google_project_service.required_apis]
+}
+
+# Wait for service accounts to be created (they're created async after API enablement)
+resource "time_sleep" "wait_for_service_accounts" {
+  create_duration = "60s"
+
+  depends_on = [
+    google_project_service.required_apis,
+    null_resource.trigger_cloudbuild_sa_creation
+  ]
+}
+
 # Grant Cloud Build service account necessary permissions
 resource "google_project_iam_member" "cloudbuild_sa_serviceAccountUser" {
   project = var.project_id
   role    = "roles/iam.serviceAccountUser"
   member  = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "cloudbuild_sa_logging" {
@@ -63,7 +82,7 @@ resource "google_project_iam_member" "cloudbuild_sa_logging" {
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "cloudbuild_sa_artifactregistry" {
@@ -71,7 +90,7 @@ resource "google_project_iam_member" "cloudbuild_sa_artifactregistry" {
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "cloudbuild_sa_builder" {
@@ -79,7 +98,7 @@ resource "google_project_iam_member" "cloudbuild_sa_builder" {
   role    = "roles/cloudbuild.builds.builder"
   member  = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "compute_sa_serviceAccountUser" {
@@ -87,7 +106,7 @@ resource "google_project_iam_member" "compute_sa_serviceAccountUser" {
   role    = "roles/iam.serviceAccountUser"
   member  = "serviceAccount:${var.project_id}-compute@developer.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "compute_sa_cloudfunctions_developer" {
@@ -95,7 +114,7 @@ resource "google_project_iam_member" "compute_sa_cloudfunctions_developer" {
   role    = "roles/cloudfunctions.developer"
   member  = "serviceAccount:${var.project_id}-compute@developer.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_project_iam_member" "compute_sa_builder" {
@@ -103,7 +122,7 @@ resource "google_project_iam_member" "compute_sa_builder" {
   role    = "roles/cloudbuild.builds.builder"
   member  = "serviceAccount:${var.project_id}-compute@developer.gserviceaccount.com"
 
-  depends_on = [google_project_service.required_apis]
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 # Grant service agents permission to use MIG scheduler service account
@@ -111,6 +130,8 @@ resource "google_service_account_iam_member" "mig_scheduler_cloudbuild_user" {
   service_account_id = google_service_account.mig_scheduler.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
+
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 resource "google_service_account_iam_member" "mig_scheduler_gcf_user" {
@@ -123,6 +144,8 @@ resource "google_service_account_iam_member" "mig_scheduler_cloudbuild_agent_use
   service_account_id = google_service_account.mig_scheduler.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
+
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 # Grant storage bucket access to Cloud Build
@@ -130,6 +153,8 @@ resource "google_storage_bucket_iam_member" "function_source_cloudbuild" {
   bucket = google_storage_bucket.function_source.name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${var.project_id}@cloudbuild.gserviceaccount.com"
+
+  depends_on = [time_sleep.wait_for_service_accounts]
 }
 
 # Get project number for service agent accounts
