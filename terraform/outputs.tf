@@ -13,9 +13,9 @@ output "mig_name" {
   value       = var.mig_name
 }
 
-output "mig_region" {
-  description = "Region of the MIG"
-  value       = var.mig_region
+output "mig_zone" {
+  description = "Zone of the MIG"
+  value       = var.mig_zone
 }
 
 output "scale_down_topic" {

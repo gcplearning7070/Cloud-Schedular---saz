@@ -115,7 +115,7 @@ resource "google_cloudfunctions2_function" "mig_scheduler" {
     environment_variables = {
       GCP_PROJECT       = var.project_id
       MIG_NAME          = var.mig_name
-      MIG_REGION        = var.mig_region
+      MIG_ZONE          = var.mig_zone
       MIG_SCALE_UP_SIZE = tostring(var.mig_scale_up_size)
     }
   }
@@ -163,7 +163,7 @@ resource "google_cloudfunctions2_function" "mig_scheduler_scale_up" {
     environment_variables = {
       GCP_PROJECT       = var.project_id
       MIG_NAME          = var.mig_name
-      MIG_REGION        = var.mig_region
+      MIG_ZONE          = var.mig_zone
       MIG_SCALE_UP_SIZE = tostring(var.mig_scale_up_size)
     }
   }
@@ -217,7 +217,7 @@ resource "google_cloud_scheduler_job" "scale_down" {
       action     = "scale_down"
       project_id = var.project_id
       mig_name   = var.mig_name
-      region     = var.mig_region
+      zone       = var.mig_zone
     }))
   }
 
@@ -241,7 +241,7 @@ resource "google_cloud_scheduler_job" "scale_up" {
       action        = "scale_up"
       project_id    = var.project_id
       mig_name      = var.mig_name
-      region        = var.mig_region
+      zone          = var.mig_zone
       scale_up_size = var.mig_scale_up_size
     }))
   }

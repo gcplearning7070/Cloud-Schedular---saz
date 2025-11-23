@@ -15,10 +15,10 @@ variable "mig_name" {
   default     = "oracle-linux-mig"
 }
 
-variable "mig_region" {
-  description = "Region where the MIG is located"
+variable "mig_zone" {
+  description = "Zone where the MIG is located (for zonal MIGs)"
   type        = string
-  default     = "us-central1"
+  default     = "us-central1-a"
 }
 
 variable "mig_scale_up_size" {

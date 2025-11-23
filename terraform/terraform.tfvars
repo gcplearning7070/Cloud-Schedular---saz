@@ -2,8 +2,8 @@ project_id = "gcp-terraform-demo-474514"
 region     = "us-central1"
 
 # Managed Instance Group configuration
-mig_name   = "oracle-linux-mig"
-mig_region = "us-central1"
+mig_name = "oracle-linux-mig"
+mig_zone = "us-central1-a"
 
 # Target size when scaling up (scales down to 0 on weekends)
 mig_scale_up_size = 3
