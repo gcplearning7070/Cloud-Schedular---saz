@@ -1,4 +1,4 @@
-project_id = "gcp-terraform-demo-474514"
+project_id = "gcp-terraform-478512"
 region     = "us-central1"
 
 # Managed Instance Group configuration
