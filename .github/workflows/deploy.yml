@@ -56,14 +56,14 @@ jobs:
 
       - name: Verify Backend Bucket Access
         run: |
-          BUCKET_NAME="gcp-tftbk"
+          BUCKET_NAME="gcp-tftbk2"
           PROJECT_ID=$(grep 'project_id' terraform/terraform.tfvars | cut -d'"' -f2)
           
           # Verify bucket exists and is accessible
           if gcloud storage buckets describe "gs://${BUCKET_NAME}" --project="${PROJECT_ID}" &>/dev/null; then
-            echo "Backend bucket 'gcp-tftbk' is accessible"
+            echo "Backend bucket 'gcp-tftbk2' is accessible"
           else
-            echo "Error: Backend bucket 'gcp-tftbk' not found or not accessible"
+            echo "Error: Backend bucket 'gcp-tftbk2' not found or not accessible"
             exit 1
           fi
 
