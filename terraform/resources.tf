@@ -58,6 +58,16 @@ data "google_project" "project" {
   project_id = var.project_id
 }
 
+# Grant access to GCF internal storage bucket
+resource "google_storage_bucket_iam_member" "gcf_source_bucket_access" {
+  bucket = "gcf-v2-sources-${data.google_project.project.number}-${var.region}"
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.mig_scheduler.email}"
+  
+  # This bucket is auto-created by GCF, so we add a dependency
+  depends_on = [google_project_service.required_apis]
+}
+
 # Create GCS bucket for Cloud Function source code
 resource "google_storage_bucket" "function_source" {
   name          = "${var.project_id}-vm-scheduler-source"
