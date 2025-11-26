@@ -28,47 +28,44 @@ resource "google_pubsub_topic" "scale_up" {
   depends_on = [google_project_service.required_apis]
 }
 
-# Service account for Cloud Function
+# Service account for entire MIG Scheduler project
 resource "google_service_account" "mig_scheduler" {
   account_id   = "mig-scheduler-sa"
   display_name = "MIG Scheduler Service Account"
-  description  = "Service account for MIG scheduler Cloud Function"
+  description  = "Service account for entire MIG scheduler project (Cloud Functions, Compute, Storage)"
 }
 
-# Grant Compute Instance Admin role to service account (required for MIG resize)
-resource "google_project_iam_member" "compute_admin" {
+# Grant all necessary roles to MIG scheduler service account
+resource "google_project_iam_member" "mig_scheduler_roles" {
+  for_each = toset([
+    "roles/compute.instanceAdmin.v1",  # Required for MIG resize operations
+    "roles/compute.viewer",            # Required to view MIG state
+    "roles/cloudfunctions.admin",      # Required for Cloud Functions deployment
+    "roles/storage.admin",             # Required for Cloud Storage operations
+    "roles/logging.logWriter",         # Required for writing logs
+    "roles/artifactregistry.writer",   # Required for container registry
+    "roles/cloudbuild.builds.builder", # Required for Cloud Build
+    "roles/iam.serviceAccountUser",    # Required to act as service account
+  ])
+
   project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
+  role    = each.key
   member  = "serviceAccount:${google_service_account.mig_scheduler.email}"
-}
-
-# Grant Compute Viewer role to service account
-resource "google_project_iam_member" "compute_viewer" {
-  project = var.project_id
-  role    = "roles/compute.viewer"
-  member  = "serviceAccount:${google_service_account.mig_scheduler.email}"
-}
-
-# Grant service agents permission to use MIG scheduler service account
-# Note: Only Google-managed service agents need permissions
-# Cloud Build and Compute default SAs are NOT required for Cloud Functions Gen2
-# when deploying via a properly configured service account (like GitHub Actions SA)
-
-resource "google_service_account_iam_member" "mig_scheduler_gcf_user" {
-  service_account_id = google_service_account.mig_scheduler.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:service-${data.google_project.project.number}@gcf-admin-robot.iam.gserviceaccount.com"
-}
-
-resource "google_service_account_iam_member" "mig_scheduler_cloudbuild_agent_user" {
-  service_account_id = google_service_account.mig_scheduler.name
-  role               = "roles/iam.serviceAccountUser"
-  member             = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
 }
 
 # Get project number for service agent accounts
 data "google_project" "project" {
   project_id = var.project_id
+}
+
+# Grant access to GCF internal storage bucket
+resource "google_storage_bucket_iam_member" "gcf_source_bucket_access" {
+  bucket = "gcf-v2-sources-${data.google_project.project.number}-${var.region}"
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.mig_scheduler.email}"
+  
+  # This bucket is auto-created by GCF, so we add a dependency
+  depends_on = [google_project_service.required_apis]
 }
 
 # Create GCS bucket for Cloud Function source code
@@ -116,8 +113,9 @@ resource "google_cloudfunctions2_function" "mig_scheduler" {
   description = "Automated MIG scheduler for scale up/down"
 
   build_config {
-    runtime     = "python311"
-    entry_point = "mig_scheduler"
+    runtime         = "python311"
+    entry_point     = "mig_scheduler"
+    service_account = google_service_account.mig_scheduler.id
 
     source {
       storage_source {
@@ -152,8 +150,7 @@ resource "google_cloudfunctions2_function" "mig_scheduler" {
 
   depends_on = [
     google_project_service.required_apis,
-    google_project_iam_member.compute_admin,
-    google_project_iam_member.compute_viewer
+    google_project_iam_member.mig_scheduler_roles
   ]
 }
 
@@ -164,8 +161,9 @@ resource "google_cloudfunctions2_function" "mig_scheduler_scale_up" {
   description = "Automated MIG scheduler for scale up"
 
   build_config {
-    runtime     = "python311"
-    entry_point = "mig_scheduler"
+    runtime         = "python311"
+    entry_point     = "mig_scheduler"
+    service_account = google_service_account.mig_scheduler.id
 
     source {
       storage_source {
@@ -200,8 +198,7 @@ resource "google_cloudfunctions2_function" "mig_scheduler_scale_up" {
 
   depends_on = [
     google_project_service.required_apis,
-    google_project_iam_member.compute_admin,
-    google_project_iam_member.compute_viewer
+    google_project_iam_member.mig_scheduler_roles
   ]
 }
 
@@ -234,24 +231,17 @@ resource "google_cloud_run_service_iam_member" "mig_scheduler_scale_up_sa_invoke
   member   = "serviceAccount:${google_service_account.mig_scheduler.email}"
 }
 
-# Service account for Cloud Scheduler
-resource "google_service_account" "scheduler" {
-  account_id   = "vm-scheduler-invoker"
-  display_name = "VM Scheduler Invoker"
-  description  = "Service account for Cloud Scheduler to publish to Pub/Sub"
-}
-
-# Grant Pub/Sub Publisher role to scheduler service account
+# Grant Pub/Sub Publisher role to MIG scheduler service account (for Cloud Scheduler)
 resource "google_pubsub_topic_iam_member" "scale_down_publisher" {
   topic  = google_pubsub_topic.scale_down.name
   role   = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.scheduler.email}"
+  member = "serviceAccount:${google_service_account.mig_scheduler.email}"
 }
 
 resource "google_pubsub_topic_iam_member" "scale_up_publisher" {
   topic  = google_pubsub_topic.scale_up.name
   role   = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.scheduler.email}"
+  member = "serviceAccount:${google_service_account.mig_scheduler.email}"
 }
 
 # Cloud Scheduler job for scaling down MIG
